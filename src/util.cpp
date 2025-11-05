@@ -1,5 +1,8 @@
 #include "common.h"
 
+#if BOOST_VERSION >= 108600
+#include <boost/asio/io_context.hpp>
+#endif
 #include <boost/process.hpp>
 
 
@@ -52,5 +55,17 @@ bool get_line( FILE *fp, std::string &line )
 
 int  system( const std::list< std::string > &args )
 {
+   assert( !args.empty( ) );
+
+#if BOOST_VERSION < 108600
    return boost::process::system( boost::process::args = args );
+#else
+
+   std::list< boost::string_view >   args2;
+   for ( auto itr = args.begin( ); ++itr != args.end( ); )
+      args2.emplace_back( *itr );
+
+   boost::asio::io_context    ctx;
+   return boost::process::execute( boost::process::process( ctx, args.front( ), args2 ) );
+#endif
 }
