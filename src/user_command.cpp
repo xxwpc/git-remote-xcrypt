@@ -148,7 +148,7 @@ static int do_add( unsigned argc, char **argv )
 {
    if ( argc < 4 )
    {
-      printf( "%s add <name> <url> <password> [<git remote add options>]\n", grx_name );
+      printf( "usage: %s add <remote-name> <remote-url> <password> [<git remote add options>]\n", grx_name );
       _Exit( EXIT_FAILURE );
    }
 
@@ -178,11 +178,14 @@ static int do_add( unsigned argc, char **argv )
 
 
 
+/**
+ * 清除一个分支的缓存文件
+ */
 static int do_clear( unsigned argc, char **argv )
 {
-   if ( argc == 0 )
+   if ( argc <= 1 )
    {
-      fprintf( stderr, "git-remote-xcrypt clear <name>\n" );
+      fprintf( stderr, "usage: %s clear <remote-name>\n", grx_name );
       _Exit( EXIT_FAILURE );
    }
 
@@ -272,7 +275,7 @@ static int do_clone( unsigned argc, char **argv )
    }
 
 usage:
-   printf( "usage: %s clone <name> <url> <password> [<git clone options>] [-- <dir>]\n", grx_name );
+   printf( "usage: %s clone <remote-name> <remote-url> <password> [<git clone options>] [-- <dir>]\n", grx_name );
    return EXIT_FAILURE;
 }
 
@@ -304,7 +307,7 @@ static int do_crypt( unsigned argc, char **argv, void (*crypt)( git_oid & ) )
    return EXIT_SUCCESS;
 
 usage:
-   printf( "usage: git-remote-xcrypt encrypt <name> <object>\n" );
+   printf( "usage: %s encrypt <name> <object>\n", grx_name );
    return EXIT_FAILURE;
 }
 

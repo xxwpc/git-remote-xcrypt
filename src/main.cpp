@@ -5,6 +5,7 @@
 
 
 
+// git-remote-xcrypt 的实际运行时的名称
 const char *grx_name;
 
 
