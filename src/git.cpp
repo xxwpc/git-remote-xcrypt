@@ -16,6 +16,9 @@ void repo_close( )
 
 
 
+/**
+ * 获取远程密钥在配置中的名称
+ */
 std::string get_secret_key_config_name( const char *remote_name )
 {
    std::string    name = "remote.";

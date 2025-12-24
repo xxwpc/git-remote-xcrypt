@@ -27,7 +27,8 @@ static void repo_open_cur_dir( )
    printf( "command:\n" );
    printf( "   add          add a remote\n" );
    printf( "   clear        clear cache files\n" );
-   printf( "   clone        clone an encrypted repository\n" ),
+   printf( "   clone        clone an encrypted repository\n" );
+   printf( "   remove       remove a remote\n" );
 //   printf( "   decrypt      decrypt a object\n" );
 //   printf( "   encrypt      encrypt a object\n" );
 //   printf( "   set          modify config\n" );
@@ -119,6 +120,9 @@ def_val:
 
 
 
+/**
+ * 删除并清理指定 remote 下匹配 prefix 的 refs
+ */
 static void remote_refs( const char *prefix )
 {
    git_reference_iterator  *itr;
@@ -140,6 +144,32 @@ static void remote_refs( const char *prefix )
    }
 
    git_reference_iterator_free( itr );
+}
+
+
+
+/**
+ * 检查指定 remote 的 URL 是否以 "xcrypt::" 开头
+ * 如果 remote 不存在或发生 git 错误, 使用 git_ensure 会中止程序
+ */
+static void check_remote_xcrypt( const char *name )
+{
+   assert( remote == nullptr );
+
+   repo_open_cur_dir( );
+
+   // 打开 remote
+   remote_name = name;
+   auto ret = git_remote_lookup( &remote, repo, remote_name );
+   git_ensure( ret );
+
+   const char *url = git_remote_url( remote );
+
+   if ( url == nullptr )
+      xcrypt_abort( "can't get url of remote '%s'", remote_name );
+
+   if ( !std::string_view( url ).starts_with( "xcrypt::" ) )
+      xcrypt_abort( "remote '%s' is not an xcrypt remote", remote_name );
 }
 
 
@@ -183,17 +213,14 @@ static int do_add( unsigned argc, char **argv )
  */
 static int do_clear( unsigned argc, char **argv )
 {
-   if ( argc <= 1 )
+   if ( argc != 2 )
    {
       fprintf( stderr, "usage: %s clear <remote-name>\n", grx_name );
       _Exit( EXIT_FAILURE );
    }
 
-   repo_open_cur_dir( );
-
-   remote_name = argv[1];
-   auto  ret = git_remote_lookup( &remote, repo, remote_name );
-   git_ensure( ret );
+   // 1) 检查是否为加密远程
+   check_remote_xcrypt( argv[1] );
 
    // 删除 omp
    {
@@ -207,7 +234,51 @@ static int do_clear( unsigned argc, char **argv )
    remote_refs( "refs/remotes/" );
    remote_refs( "refs/xcrypt/remotes/" );
 
-   exit( EXIT_SUCCESS );
+   return EXIT_SUCCESS;
+}
+
+
+
+/**
+ * 删除一个加密远程仓库
+ * 1. 先清理 xcrypt 文件
+ * 2. 再移除 remote
+ */
+static int do_remove( unsigned argc, char **argv )
+{
+   if ( argc != 2 )
+   {
+      fprintf( stderr, "usage: %s remove <remote-name>\n", grx_name );
+      _Exit( EXIT_FAILURE );
+   }
+
+   // 2) 先清理 xcrypt 相关文件与 refs
+   do_clear( argc, argv );
+
+   // 3) 从配置中删除密钥
+   {
+      git_config *cfg;
+      git_ensure( git_repository_config( &cfg, repo ) );
+
+      auto  name = get_secret_key_config_name( argv[1] );
+
+      const char *val = nullptr;
+      if ( git_config_get_string( &val, cfg, name.c_str( ) ) == 0 )
+         git_ensure( git_config_delete_entry( cfg, name.c_str( ) ) );
+
+      git_config_free( cfg );
+   }
+
+   // 4) 删除远程
+   {
+      std::list< std::string > args = { "git", "remote", "remove" };
+      args.emplace_back( argv[1] );
+      auto sysret = system( args );
+      if ( sysret != 0 )
+         _Exit( sysret );
+   }
+
+   return EXIT_SUCCESS;
 }
 
 
@@ -392,6 +463,7 @@ static constexpr std::pair< std::string_view, user_command_callback >  user_comm
    { "clone",     &do_clone   },
    { "decrypt",   &do_decrypt },
    { "encrypt",   &do_encrypt },
+   { "remove",    &do_remove  },
    { "set",       &do_set     },
 };
 
