@@ -636,7 +636,13 @@ static void decrypt( git_oid &oid, const uint8_t *data, size_t size, git_otype o
 
    auto  sz = bzip_size - ( ptr - bzip_buff ) - 16;
    memcpy( text_buff, ptr, sz );
+
+#if LIBBZ3_VERSION < 10500
+   auto  ret = bz3_decode_block( bz3, text_buff, sz, file_size );
+#else
    auto  ret = bz3_decode_block( bz3, text_buff, sizeof( text_buff ), sz, file_size );
+#endif
+
    assert( ret >= 0 );
    assert( static_cast< unsigned >( ret ) == file_size );
 

@@ -26,6 +26,23 @@ find_package(PkgConfig REQUIRED)
 pkg_check_modules(LIBGIT2 REQUIRED IMPORTED_TARGET libgit2)
 pkg_check_modules(BZIP3 REQUIRED IMPORTED_TARGET bzip3>=1.4.1)
 
+# Derive LIBBZ3_VERSION from pkg-config version string, e.g. 2.5.3 -> 20503
+execute_process(
+  COMMAND "${PKG_CONFIG_EXECUTABLE}" --modversion bzip3
+  OUTPUT_VARIABLE BZIP3_MODVERSION
+  OUTPUT_STRIP_TRAILING_WHITESPACE
+)
+if (NOT BZIP3_MODVERSION)
+  message(FATAL_ERROR "Failed to query bzip3 version via pkg-config.")
+endif()
+
+string(REGEX MATCH "^([0-9]+)\\.([0-9]+)\\.([0-9]+)" _ "${BZIP3_MODVERSION}")
+if (NOT CMAKE_MATCH_1)
+  message(FATAL_ERROR "Unexpected bzip3 version format: '${BZIP3_MODVERSION}'")
+endif()
+
+math(EXPR LIBBZ3_VERSION "${CMAKE_MATCH_1} * 10000 + ${CMAKE_MATCH_2} * 100 + ${CMAKE_MATCH_3}")
+
 find_package(OpenSSL REQUIRED)          # provides OpenSSL::Crypto
 find_package(Boost REQUIRED COMPONENTS system filesystem)
 
@@ -33,6 +50,9 @@ target_compile_options(git-remote-xcrypt PRIVATE
    -O2
 )
 
+target_compile_definitions(git-remote-xcrypt PRIVATE
+  LIBBZ3_VERSION=${LIBBZ3_VERSION}
+)
 
 target_link_libraries(git-remote-xcrypt PRIVATE
   PkgConfig::LIBGIT2
