@@ -23,15 +23,15 @@ static void repo_open_cur_dir( )
 
 [[noreturn]] static void usage( )
 {
-   printf( "usage: %s <command> [<args>...]\n\n", grx_name );
-   printf( "command:\n" );
-   printf( "   add          add a remote\n" );
-   printf( "   clear        clear cache files\n" );
-   printf( "   clone        clone an encrypted repository\n" );
-   printf( "   remove       remove a remote\n" );
-//   printf( "   decrypt      decrypt a object\n" );
-//   printf( "   encrypt      encrypt a object\n" );
-//   printf( "   set          modify config\n" );
+   fprintf( stderr,
+      "usage: %s <command> [<args>...]\n"
+      "\n"
+      "commands:\n"
+      "   add        Add an encrypted remote\n"
+      "   clear      Clear cache files and local refs for an encrypted remote\n"
+      "   clone      Clone an encrypted remote\n"
+      "   remove     Remove an encrypted remote\n",
+      grx_name );
 
    _Exit( EXIT_FAILURE );
 }

@@ -2,77 +2,145 @@
 
 一个 git-remote-helper 外部插件，用于加密远程 git 仓库
 
-### 特性
-- 加密远程仓库，包括
-  - 文件内容
-  - 文件名
-  - 提交日志
-- 加密解密操作运行于本地，密钥也保存于本地，远程仓库中不出现任何明文信息，密钥信息
-- 远程仓库不需要特种仓库，依然是一个普通的 git 仓库，您可以使用 github、gitlab、本地仓库、自建服务器等做为远程仓库
-- 没有密钥的情况下，依然可以进行克隆、拉取、推送等操作，但得到都是密文
-- 支持增量式拉取、推送操作
-- 不影响本地 git 各种操作
-- 不影响 git 多人协作方式
+## 特性
+- **全链路本地加密/解密**：密钥仅保存在本地仓库的 `.git/config`，远程仓库不含任何明文或密钥信息
+- **加密范围**（对远程可见内容做密文化处理）：
+  - 文件内容（blob）
+  - 文件名（tree 条目）
+  - 提交信息/日志（commit message 等）
+- **远端零改造**：远程仍是普通 Git 仓库，可使用 GitHub / GitLab / 自建服务器 / 本地裸仓库等
+- **无密钥也可同步**：可 `clone/pull/push`，但获得/上传的均为密文
+- **支持增量同步**：拉取/推送按对象增量进行
+- **不影响本地工作流**：本地仓库保持明文，可正常使用常规 Git 命令与多人协作模式
 
-### 缺陷
-- 当前版本尚不支持 tag，后期会支持
-- 克隆 git 仓库时必须完整克隆，不支持浅克隆
-- 由于加密原因，导致 pack 文件体积比未加密版本大 10 倍左右
+## 限制
+- 暂不支持 `tag`（后续计划支持）
+- 克隆必须完整克隆（不支持浅克隆 `--depth`）
+- 加密后 `pack` 体积通常显著增大（约为未加密的 ~10 倍，视仓库内容而定）
 
-### 编译
-#### 编译依赖
-make, g++23, bzip3, libgit2, openssl, boost
-- bzip3 必须使用 1.4.1 以上, 1.4.0 对某些 64 字节小文件可能无法解压缩
-- libgit2 最好编译最新版本，当前 git 正在由 sha1 向 sha256 过渡，旧版本 libgit2 可能不认识一些新版本的仓库
-
-#### 编译方法
-在 git-remote-xcrypt 目录运行 make 命令
+## 密文示例
+以下几段 Git 命令输出用于展示：在**没有密钥**的情况下，远程仓库中可见的内容将**完全以密文形式存在**，不包含任何明文信息，被加密的内容包含：
+- 作者（Author）
+- 日期（Date）
+- 提交日志（commit message 等）
+- 文件名（tree 条目）
+- 文件内容（blob）
 ``` console
+$ git log --raw -1 2b38053884164
+commit 2b380538841642825cf6e1056928c6d98054ba55
+Author: git-remote-xcrypt <xxw_pc@163.com>
+Date:   Sun Apr 14 14:24:33 2024 +0800
+
+    D+8YoGYIlDEwFPEzuofIat89T4SIIjWEVsKoqn5SIPRL6/jHptJRDXcjxHAAGrCK
+    Q1SYsrmjoTuldoJf9Z5Xtn4b7r8usBGfuKtZj4qrNphatCG7sBI6k0hYZj8/aV+w
+    hSj+R77RQYVFNIGlkj45+hZKToUOG82oOVVaU2qOaD13pjHMJvCA0eBS8B5Uclyh
+    HwOrcwKieoXeSVNjbrDc/Ysiljpu9oGQXSKf1n/lvkJy9/XxVlgiP35FxdXgg534
+    8ev5bqLlw5Ygru2GZpFXTWpyaw6fTxbIo9H/Tjju7HrgdqxLBqG88LKJLzrpeG+l
+    Vd16Qn+X+gyUgC3GxoVRupQsw+RTd6ilsccPnDdw2Yk=
+
+:100644 100644 30ed132 7443dd2 M        0
+:100644 100644 1d144f7 20d5a42 M        1
+:100644 100644 a3d4067 39fd893 M        2
+:100644 100644 982e100 b078803 M        3
+:100644 100644 99261de e9f359a M        4/09
+:100644 100644 ad074f6 be747f6 M        4/11
+:100644 100644 1823f92 5293150 M        5
+
+$ git ls-tree -r 2b38053884164
+100644 blob 7443dd20b6078cc182d3311db5073f65061eb01d    0
+100644 blob 20d5a427d837d6476659607c77878ae013ec4670    1
+100644 blob 39fd893bd1bd922836c53a61104d9d31319d250e    2
+100644 blob b078803718c0e510b585f8cb468799a242991cd8    3
+100644 blob 0567237574c9ba8478c7569bcb2663861548fe6a    4/00
+100644 blob 76125264df96fe6207bcf77a37ec5523d445f91f    4/01
+100644 blob 80d95148ccd199ed7c06c16e481d7e24fddab63d    4/02
+100644 blob a97423f5e0bfde5806161b8afac0045ff17aa22b    4/03
+100644 blob ade670583fd7ea4d1e7369ebacd3f3a12a514275    4/04
+100644 blob db3b804822977d4045200b911b4db8dd406f306a    4/05
+100644 blob 39316c0093a057905d004a7e45a92cd4f8169dd0    4/06
+100644 blob 3a5bfbd640de50ae02808547d38c2fabb53e71d6    4/07
+100644 blob 9c687a69e501ad0952f759cb42160243c10c267d    4/08
+100644 blob e9f359a78425a3c61fc1b21d875ab87a2de447bf    4/09
+100644 blob a56957fa97003f44eb1bb5d01f487b786306ec2f    4/10
+100644 blob be747f61fcd538c812c169d19ded9c43223abbfc    4/11
+100644 blob 5293150c69e3d2bcb43dbe052e4b648b7c892234    5
+
+$ git cat-file -p 7443dd20b6078 | hexdump -C
+00000000  11 af c4 1a 21 db fa 90  72 85 f1 4a 62 a1 8e 22  |....!...r..Jb.."|
+00000010  e7 44 34 88 4e 26 7c e2  5c 54 50 f3 9f 70 4d ee  |.D4.N&|.\TP..pM.|
+00000020  ef aa 16 30 f5 d6 0f 86  7e 4d 8f e6 55 f6 00 52  |...0....~M..U..R|
+00000030  49 4b 4b 99 96 90 db bf  70 34 8a e6 12 fe 54 2f  |IKK.....p4....T/|
+00000040  60 56 11 3e 3c 41 e7 32  90 d3 0d 89 e9 9c ee d8  |`V.><A.2........|
+00000050  08 6f c0 2a e4 9d cd db  96 66 c9 e9 dd 55 89 00  |.o.*.....f...U..|
+00000060
+
+$
+```
+
+## 编译
+
+### 依赖
+- 构建工具：`cmake`、`g++`、`pkg-config`
+- 第三方库：`bzip3`、`libgit2`、`openssl`、`boost`
+
+注意事项：
+- `bzip3` 需 **>= 1.4.1**（`1.4.0` 在部分 64 字节小文件场景可能解压失败）
+- 建议使用**较新版本** `libgit2`（Git 正在从 SHA-1 迁移到 SHA-256，旧版 `libgit2` 可能无法识别新格式仓库）
+
+### 构建
+在项目根目录 `git-remote-xcrypt` 下运行：
+``` console
+$ mkdir build
+$ cd build
+$ cmake ..
 $ make
-make -C src
-make[1]: 进入目录“git-remote-xcrypt/src”
-g++ -std=gnu++23 -O0 -g -c aes.cpp -o aes.o
-g++ -std=gnu++23 -O0 -g -c crypto.cpp -o crypto.o
-g++ -std=gnu++23 -O0 -g -c git.cpp -o git.o
-g++ -std=gnu++23 -O0 -g -c main.cpp -o main.o
-g++ -std=gnu++23 -O0 -g -c omp.cpp -o omp.o
-g++ -std=gnu++23 -O0 -g -c progress.cpp -o progress.o
-g++ -std=gnu++23 -O0 -g -c remote_helper.cpp -o remote_helper.o
-g++ -std=gnu++23 -O0 -g -c user_command.cpp -o user_command.o
-g++ -std=gnu++23 -O0 -g -c util.cpp -o util.o
-g++ -std=gnu++23 -O0 -g aes.o crypto.o git.o main.o omp.o progress.o remote_helper.o user_command.o util.o -L/usr/local/lib -lgit2 -lbzip3 -lcrypto -lboost_system -lboost_filesystem -o git-remote-xcrypt
-make[1]: 离开目录“git-remote-xcrypt/src”
+  ......
 ```
 
-安装运行 make install
-清理运行 make clean
-
-### 密钥
-目前只支持明文密码，保存于本地仓库的 .git/config 内，远程仓库不保存任何密钥
-
-在终端命令，需要输入密码参数时，需在密码前加 “psw:” 前缀，如密码为 abcde, 则终端输入的密码参数为
-<br>&emsp;&emsp;psw:abcde
-
-### 用户命令
-在终端直接运行 git-remote-xcrypt 命令，实现远程加密仓库的配置
+安装：
+``` console
+$ make install
 ```
+
+清理：
+``` console
+$ make clean
+```
+
+生成的可执行文件：
+- `build/git-remote-xcrypt`
+
+## 密钥
+- 目前仅支持**明文口令**形式的密钥；密钥仅存储在**本地仓库**的 `.git/config` 中，远程仓库不保存任何密钥信息。
+- 需要在命令行传入口令参数时，必须添加 `psw:` 前缀。例如口令为 `abcde`，则应在命令行输入：
+  `psw:abcde`
+
+## 用户命令
+在本地仓库目录中直接运行 `git-remote-xcrypt`，用于创建/管理加密远程（配置写入 `.git/config`，不会修改远端仓库类型）：
+``` console
 $ git-remote-xcrypt
-usage: xcrypt <command> [<args>...]
+usage: git-remote-xcrypt <command> [<args>...]
 
 command:
-   add          add a remote
-   clear        clear cache files
-   clone        clone an encrypted repository
+   add      Add an encrypted remote
+   clear    Clear cache files and local refs for an encrypted remote
+   clone    Clone an encrypted remote
+   remove   Remove an encrypted remote
+$
 ```
 
 ### 克隆已经存在的加密仓库
-```
+用于将**已加密的远程仓库**克隆为本地明文仓库，并在克隆过程中把密钥写入新仓库的 `.git/config`。
+
+用法：
+``` console
 $ git-remote-xcrypt clone
-usage: git-remote-xcrypt clone <name> <url> <password> [<git clone options>] [-- <dir>]
+usage: git-remote-xcrypt clone <remote-name> <remote-url> <password> [<git clone options>] [-- <dir>]
+$
 ```
 
-例：远程仓库为  https://www.abc.com/repo.git，密码为 abcde, 则可运行
-```
+示例，远程仓库 `https://www.abc.com/repo.git`，口令 `abcde`：
+``` console
 $ git-remote-xcrypt clone origin https://www.abc.com/repo.git psw:abcde
 正克隆到 'abc'...
 remote: Enumerating objects: 410, done.
@@ -83,35 +151,45 @@ remote: Total 410 (delta 29), reused 391 (delta 27)
 Unpacking objects: 100% (29/29)
 Decrypting objects: 340, 0
 正在检查连通性: 340, 完成.
+$
 ```
 
-### 为已经存在的 git 仓库添加远程加密仓库
-```
+### 为已有的 Git 仓库添加加密远程
+``` console
 $ git-remote-xcrypt add
-git-remote-xcrypt add <name> <url> <password> [<git remote add options>]
+git-remote-xcrypt add <remote-name> <remote-url> <password> [<git remote add options>]
+$
 ```
 
-例：添加远程仓库并推送
-```
+示例：添加加密远程
+``` console
 $ git-remote-xcrypt add origin https://www.abc.com/repo.git psw:abcde
 $
-$ git push -u origin master:master
-Encrypting objects: 16, 151
-Enumerating objects: 24
-Compressing objects: 100% (24/24)
-Writing objects: 100% (24/24)
-To t-ren.com:my/mx/xui.git
-   9e778b2..a39a0a4  master -> master
 ```
 
-### 清除远程仓库相关缓存
-当某些情况下，需要清除本地缓存
+### 清除加密远程的本地缓存
+当出现异常（如本地 refs/缓存与远端状态不一致导致的拉取/推送失败）时，可清理指定加密远程对应的本地缓存与引用，然后重新执行 `pull/push`。
+``` console
+$ git-remote-xcrypt clean
+usage: xcrypt clear <remote-name>
+$
+```
 
-```
-git-remote-xcrypt clean <name>
-```
-例：
-```
+示例：清理 `origin` 的加密远程缓存
+``` console
 $ git-remote-xcrypt clean origin
+$
 ```
 
+### 删除加密远程，并清理本地残留
+``` console
+$ git-remote-xcrypt remove
+usage: xcrypt remove <remote-name>
+$
+```
+
+示例：删除加密远程 `origin`，会执行清理，并移除远程配置与密钥项
+``` console
+$ git-remote-xcrypt remove origin
+$
+```

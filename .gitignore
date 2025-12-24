@@ -3,3 +3,4 @@ git-remote-xcrypt*
 *.bak
 *.o
 /.vs
+/build
