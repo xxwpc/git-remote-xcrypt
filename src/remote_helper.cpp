@@ -1,7 +1,14 @@
 ﻿#include "common.h"
 
+#include <filesystem>
 #include <regex>
 #include <typeinfo>
+#include <vector>
+
+//#include <errno.h>
+#include <fcntl.h>
+#include <termios.h>
+//#include <unistd.h>
 
 #include <boost/preprocessor/arithmetic/sub.hpp>
 #include <boost/preprocessor/control/if.hpp>
@@ -92,20 +99,166 @@ static int transport_message( const char *str, int len, void *payload )
 
 
 /**
- * 目前只支持获取 ~/.ssh/id_rda 密钥
+ * 从终端读取密码, 不回显
+ *
+ * - 通过 `/dev/tty` 读取
+ * - 读取前后清空 tty 缓存（tcflush）
+ * - 按字节读取，直到遇到 '\n' 或 '\r'
+ */
+static std::string read_password( const std::string_view &prompt )
+{
+   fprintf( stderr, "%s's password: ", prompt.data( ) );
+   fflush( stderr );
+
+   int tty_fd = open( "/dev/tty", O_RDWR | O_CLOEXEC );
+   if ( tty_fd < 0 )
+      xcrypt_abort( "open /dev/tty failed: %s", strerror( errno ) );
+
+   // 读取前清空缓存，避免残留输入（例如上一次回车）直接被读走
+   (void)tcflush( tty_fd, TCIOFLUSH );
+
+   struct termios oldt;
+   if ( tcgetattr( tty_fd, &oldt ) != 0 )
+   {
+      close( tty_fd );
+      xcrypt_abort( "tcgetattr failed: %s", strerror( errno ) );
+   }
+
+   struct termios newt = oldt;
+   newt.c_lflag &= static_cast< tcflag_t >( ~ECHO );
+
+   if ( tcsetattr( tty_fd, TCSANOW, &newt ) != 0 )
+   {
+      (void)tcsetattr( tty_fd, TCSANOW, &oldt );
+      close( tty_fd );
+      xcrypt_abort( "tcsetattr failed: %s", strerror( errno ) );
+   }
+
+   std::string password;
+
+   while ( true )
+   {
+      char ch;
+      const auto n = read( tty_fd, &ch, 1 );
+      if ( n == 0 )
+         break;
+
+      if ( n < 0 )
+      {
+         if ( errno == EINTR )
+            continue;
+
+         (void)tcsetattr( tty_fd, TCSANOW, &oldt );
+         close( tty_fd );
+         xcrypt_abort( "read /dev/tty failed: %s", strerror( errno ) );
+      }
+
+      if ( ch == '\n' || ch == '\r' )
+         break;
+
+      password.push_back( ch );
+   }
+
+   // 恢复回显
+   (void)tcsetattr( tty_fd, TCSANOW, &oldt );
+
+   // 读取后再次清空缓存，避免残留（例如 Windows 风格 \r\n 的另一半）影响后续读取
+   (void)tcflush( tty_fd, TCIOFLUSH );
+
+   close( tty_fd );
+
+   // 因为没有回显，读取密码遇到回车结束后，那个回车不会显示在终端上，所以这里补一个换行
+   fprintf( stderr, "\n" );
+   return password;
+}
+
+
+
+/**
+ * 需求:
+ *  - 该函数会被多次调用；每次返回一个证书(私钥)或明文密码
+ *  - 若 ~/.ssh 存在多个证书，则依次尝试
+ *  - 所有证书都失败后，最后返回明文密码
  */
 static int ssh_cred_acquire( git_cred **cred, const char *url, const char *username_from_url, unsigned int allowed_types, void *payload )
 {
-   auto  home = my_getenv( "HOME" );
-   assert( home != nullptr );
+   (void)url;
 
-   std::string    id_rsa( home );
-   id_rsa += "/.ssh/id_rsa";
+   assert( payload != nullptr );
+   auto  &idx = *static_cast< unsigned * >( payload );
 
-   auto ret = git_cred_ssh_key_new( cred, username_from_url, nullptr, id_rsa.c_str( ), nullptr );
-   git_ensure( ret );
+   // 依次尝试的证书列表
+   static constexpr const char *cred_names[] =
+   {
+      "id_rsa",
+      "id_ecdsa",
+      "id_ecdsa_sk",
+      "id_ed25519",
+      "id_ed25519_sk",
+   };
 
-   return 0;
+   // 优先尝试 ~/.ssh 目录下的证书
+   if ( ( ( allowed_types & GIT_CREDTYPE_SSH_KEY ) != 0 ) && ( idx < std::size( cred_names ) ) )
+   {
+      // 获取家目录
+      auto home = my_getenv( "HOME" );
+
+      // 如果家目录不存在，则跳过 ~/.ssh 下的证书，尝试明文密码
+      if ( home == nullptr )
+         idx = std::size( cred_names );
+
+      // 依次尝试 ~/.ssh 下的证书
+      else
+      {
+         std::filesystem::path   key_path;
+
+         while ( idx < std::size( cred_names ) )
+         {
+            key_path  = home;
+            key_path /= ".ssh";
+            key_path /= cred_names[idx];
+            ++idx;
+
+            if ( !std::filesystem::exists( key_path ) )
+               continue;
+
+            auto ret = git_cred_ssh_key_new( cred, username_from_url, nullptr, key_path.c_str( ), nullptr );
+            if ( ret == 0 )
+               return 0;
+         }
+      }
+   }
+
+   // 证书用尽（或不允许 SSH_KEY）后：最后回退到明文密码
+   if ( ( ( allowed_types & GIT_CREDTYPE_USERPASS_PLAINTEXT ) != 0 ) && ( idx >= std::size( cred_names ) ) )
+   {
+      // 如果不是第一次尝试明文密码，则表示已经失败过一次，提示权限被拒绝
+      if ( idx != std::size( cred_names ) )
+         fprintf( stderr, "Permission denied, please try again.\n" );
+
+      ++idx;
+
+      // url 形如: ssh://username@hostname:port/path/to/repo.git
+      //     或          username@hostname:port/path/to/repo.git
+      // 读取密码前，需要提取提示字符串 username@hostname
+
+      std::string  prompt = url;
+
+      if ( prompt.starts_with( "ssh://" ) )
+         prompt.erase( 0, 6 );
+
+      if ( auto pos = prompt.find( ':' ); pos != std::string::npos )
+         prompt.resize( pos );
+
+      // 读取密码
+      std::string  password = read_password( prompt );
+
+      auto ret = git_cred_userpass_plaintext_new( cred, username_from_url, password.c_str( ) );
+      if ( ret == 0 )
+         return 0;
+   }
+
+   return GIT_PASSTHROUGH;
 }
 
 
@@ -159,6 +312,15 @@ static int push_update_ref( const char *refname, const char *status, void *data 
 
 
 
+/**
+ * ssh_cred_acquire 函数中, 如果 ~/.ssh 中存在多少证书, 则依次尝试多少次
+ * 在每次尝试时, cred_index 会自增
+ * 在每次连接开始前, 将 cred_index 重置为 0
+ */
+static unsigned cred_index;
+
+
+
 static constexpr git_remote_callbacks  remote_cb =
 {
    .version                = GIT_REMOTE_CALLBACKS_VERSION,
@@ -168,6 +330,7 @@ static constexpr git_remote_callbacks  remote_cb =
    .pack_progress          = pack_progress,
    .push_transfer_progress = push_transfer_progress,
    .push_update_reference  = push_update_ref,
+   .payload                = &cred_index,
 };
 
 
@@ -263,6 +426,7 @@ static git_transport * connect_fetch( )
    git_ensure( ret );
 
 #if LIBGIT2_NUMBER >= 10500
+   cred_index = 0;
    ret = t->connect( t, remote_url, GIT_DIRECTION_FETCH, &connect_opts );
    git_ensure( ret );
 #else
@@ -289,6 +453,9 @@ static void do_list_fetch( )
 
 static void do_list_push( )
 {
+   // 连接之前, 重置
+   cred_index = 0;
+
 #if LIBGIT2_NUMBER >= 10400
    auto  ret = git_remote_connect_ext( remote, GIT_DIRECTION_PUSH, &connect_opts );
    git_ensure( ret );
@@ -579,11 +746,8 @@ static void do_push( )
       arr.push( std::move( refspec ) );
    }
 
-#if LIBGIT2_NUMBER >= 10400
+   cred_index = 0;
    ret = git_remote_upload( remote, arr, &push_opts );
-#else
-   ret = git_remote_upload( remote, arr, &push_opts );
-#endif
    git_ensure( ret );
 
    output( );

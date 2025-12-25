@@ -4,3 +4,4 @@ git-remote-xcrypt*
 *.o
 /.vs
 /build
+/out
