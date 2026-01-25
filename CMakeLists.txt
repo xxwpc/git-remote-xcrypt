@@ -44,11 +44,25 @@ endif()
 math(EXPR LIBBZ3_VERSION "${CMAKE_MATCH_1} * 10000 + ${CMAKE_MATCH_2} * 100 + ${CMAKE_MATCH_3}")
 
 find_package(OpenSSL REQUIRED)          # provides OpenSSL::Crypto
-find_package(Boost REQUIRED COMPONENTS system filesystem)
 
-target_compile_options(git-remote-xcrypt PRIVATE
-   -O2
-)
+# Find Boost with CMP0167 handling
+cmake_policy(SET CMP0167 NEW)
+find_package(Boost QUIET)
+if (NOT Boost_FOUND)
+   cmake_policy(SET CMP0167 OLD)
+   find_package( Boost QUIET )
+   if (NOT Boost_FOUND)
+      message(FATAL_ERROR "Boost not found via CMP0167=NEW nor CMP0167=OLD. Please install Boost (dev) and ensure CMake can find it.")
+   endif()
+endif()
+
+find_package(Boost REQUIRED COMPONENTS context system filesystem)
+
+# boost 1.70.0 之后, 才有 process 独立库
+if (Boost_VERSION VERSION_GREATER_EQUAL "1.70.0")
+  find_package(Boost REQUIRED COMPONENTS process)
+  target_link_libraries(git-remote-xcrypt PRIVATE Boost::process)
+endif()
 
 target_compile_definitions(git-remote-xcrypt PRIVATE
   LIBBZ3_VERSION=${LIBBZ3_VERSION}
