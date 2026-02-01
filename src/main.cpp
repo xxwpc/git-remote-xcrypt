@@ -22,11 +22,11 @@ static void install_ctrl_c( )
 {
    struct sigaction action;
 
-	action.sa_handler = ctrl_c;
-	sigemptyset( &action.sa_mask );
-	action.sa_flags = 0;
+   action.sa_handler = ctrl_c;
+   sigemptyset( &action.sa_mask );
+   action.sa_flags = 0;
 
-	sigaction( SIGINT, &action, nullptr );
+   sigaction( SIGINT, &action, nullptr );
 }
 
 

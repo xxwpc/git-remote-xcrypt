@@ -1,4 +1,4 @@
-#include "common.h"
+﻿#include "common.h"
 
 
 
@@ -23,7 +23,7 @@ namespace
          if ( _ctx == nullptr ) [[unlikely]]
          {
             _ctx = EVP_CIPHER_CTX_new( );
-            assert( _ctx != nullptr );
+            ensure( _ctx != nullptr );
          }
          else
          {
@@ -38,7 +38,7 @@ namespace
 
       size_t update( void *out_buff, const void *in_buff, size_t in_size )
       {
-         assert( in_size <= INT_MAX );
+         ensure( in_size <= INT_MAX );
 
          int   out_size;
          auto  ret = EVP_CipherUpdate( _ctx, static_cast< unsigned char * >( out_buff ), &out_size,
@@ -77,7 +77,7 @@ static void aes_first_block_by_passwd( uint8_t *out, const uint8_t *in, bool enc
    aes.reset( EVP_aes_256_ecb( ), pw.key, nullptr, enc );
 
    auto  sz = aes.update( out, in, enc ? 16 : 32 );
-   assert( sz == 16 );
+   ensure( sz == 16 );
 }
 
 
@@ -114,7 +114,7 @@ static void crypt_first_block( uint8_t *out, const uint8_t *in, bool enc )
 
 size_t aes_encrypt( uint8_t *out_buff, const uint8_t *in_buff, size_t in_size )
 {
-   assert( in_size >= 32 );
+   ensure( in_size >= 32 );
 
    uint8_t  key[16];
    uint8_t  iv[16];
@@ -134,8 +134,8 @@ size_t aes_encrypt( uint8_t *out_buff, const uint8_t *in_buff, size_t in_size )
 
 size_t aes_decrypt( uint8_t *out_buff, const uint8_t *in_buff, size_t in_size )
 {
-   assert( in_size >= 48 );
-   assert( ( in_size % 16 ) == 0 );
+   ensure( in_size >= 48 );
+   ensure( ( in_size % 16 ) == 0 );
 
    uint8_t  key[16];
    memcpy( key, in_buff, 16 );

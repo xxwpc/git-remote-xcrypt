@@ -1,4 +1,4 @@
-#include <fstream>
+﻿#include <fstream>
 #include <unordered_map>
 
 #include <boost/interprocess/file_mapping.hpp>
@@ -98,7 +98,7 @@ std::pair< const git_oid, const git_oid > * omp_find( const git_oid &id )
    if ( itr == omp.end( ) )
       return nullptr;
 
-   assert( odb != nullptr );
+   ensure( odb != nullptr );
    if ( git_odb_exists( odb, &itr->second ) == 0 )
       return nullptr;
 
@@ -117,7 +117,7 @@ static void omp_insert_one( const git_oid &a, const git_oid &b )
       return;
    }
 
-   assert( git_oid_cmp( &rst.first->second, &b ) == 0 );
+   ensure( git_oid_cmp( &rst.first->second, &b ) == 0 );
 }
 
 
@@ -165,7 +165,7 @@ void omp_store( )
    size_t  size = reinterpret_cast< uint8_t * >( ptr ) - buff;
    sha3_256( reinterpret_cast< uint8_t (&)[32] >( *ptr ), buff, size );
    auto  sz = aes_encrypt( buff, buff, size + 32 );
-   assert( sz == ( size + 32 + 16 ) );
+   ensure( sz == ( size + 32 + 16 ) );
 
    std::ofstream  os( tmp_path.c_str( ), std::ios_base::binary | std::ios_base::trunc );
    os.write( reinterpret_cast< char * >( static_cast< uint8_t * >( buff ) ), sz );

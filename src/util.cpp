@@ -1,4 +1,4 @@
-#include "common.h"
+﻿#include "common.h"
 
 #if BOOST_VERSION >= 108600
 #include <boost/asio/io_context.hpp>
@@ -55,7 +55,7 @@ bool get_line( FILE *fp, std::string &line )
 
 int  system( const std::list< std::string > &args )
 {
-   assert( !args.empty( ) );
+   ensure( !args.empty( ) );
 
 #if BOOST_VERSION < 108600
    return boost::process::system( boost::process::args = args );

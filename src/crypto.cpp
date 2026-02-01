@@ -1,4 +1,4 @@
-#include "common.h"
+﻿#include "common.h"
 
 #include <condition_variable>
 #include <mutex>
@@ -78,7 +78,7 @@ static bz3_state  *bz3;
 void init_crypt( )
 {
    bz3 = bz3_new( MIN_BZIP3 );
-   assert( bz3 != nullptr );
+   ensure( bz3 != nullptr );
 }
 
 
@@ -135,9 +135,9 @@ void get_commit_refs( Oid_vec &refs, git_odb_object *obj )
 
    // tree
    {
-      assert( sv.size( ) >= ( 4 + 1 + GIT_OID_HEXSZ + 1 ) );
-      assert( sv[4 + 1 + GIT_OID_HEXSZ] == '\n' );
-      assert( sv.starts_with( "tree " ) );
+      ensure( sv.size( ) >= ( 4 + 1 + GIT_OID_HEXSZ + 1 ) );
+      ensure( sv[4 + 1 + GIT_OID_HEXSZ] == '\n' );
+      ensure( sv.starts_with( "tree " ) );
 
       auto  &oid = refs.emplace_back( );
       auto   ret = git_oid_fromstr( &oid, sv.data( ) + 5 );
@@ -149,8 +149,8 @@ void get_commit_refs( Oid_vec &refs, git_odb_object *obj )
    // parent
    while ( sv.starts_with( "parent " ) )
    {
-      assert( sv.size( ) >= ( 6 + 1 + GIT_OID_HEXSZ + 1 ) );
-      assert( sv[6 + 1 + GIT_OID_HEXSZ] == '\n' );
+      ensure( sv.size( ) >= ( 6 + 1 + GIT_OID_HEXSZ + 1 ) );
+      ensure( sv[6 + 1 + GIT_OID_HEXSZ] == '\n' );
 
       auto  &oid = refs.emplace_back( );
       auto   ret = git_oid_fromstr( &oid, sv.data( ) + 7 );
@@ -170,13 +170,13 @@ void get_tree_refs( Oid_vec &refs, git_odb_object *obj )
    {
       char  *sp;
       auto   mode = strtoul( sv.data( ), &sp, 8 );
-      assert( *sp == ' ' );
+      ensure( *sp == ' ' );
 
       auto  nul = sv.find( '\0', sp + 1 - sv.data( ) );
-      assert( nul != sv.npos );
+      ensure( nul != sv.npos );
       ++nul;
 
-      assert( sv.size( ) >= ( nul + GIT_OID_RAWSZ ) );
+      ensure( sv.size( ) >= ( nul + GIT_OID_RAWSZ ) );
 
       if ( mode != GIT_FILEMODE_COMMIT )
       {
@@ -199,7 +199,7 @@ static void get_refs( Oid_vec &refs, git_odb_object *obj )
    case GIT_OBJ_COMMIT:  get_commit_refs( refs, obj );  return;
    case GIT_OBJ_TREE:    get_tree_refs( refs, obj );    return;
    case GIT_OBJ_BLOB:                                   return;
-   default:              assert( false );               return;
+   default:              ensure( false );               return;
    }
 
    // for ( auto &ref : refs )
@@ -246,12 +246,12 @@ static size_t encrypt_buff( const git_oid &oid, const uint8_t *data, size_t size
    if ( size > MIN_BZIP3 )
    {
       bz3 = bz3_new( size );
-      assert( bz3 != nullptr );
+      ensure( bz3 != nullptr );
    }
 
    memcpy( out, data, size );
    auto  sz = bz3_encode_block( bz3, out, size );
-   assert( sz > 0 );
+   ensure( sz > 0 );
    out += static_cast< uint32_t >( sz );
 
    if ( bz3 != ::bz3 )
@@ -308,7 +308,7 @@ static void encrypt_commit( encrypt_element &top )
    for ( ; ( end - ptr ) > 48; ptr += 48 )
    {
       auto  sz = boost::beast::detail::base64::encode( out, ptr, 48 );
-      assert( sz == 64 );
+      ensure( sz == 64 );
 
       out[64] = '\n';
 
@@ -360,15 +360,15 @@ static void encrypt_tree( encrypt_element &top )
    {
       char  *sp;
       auto   mode = strtoul( sv.data( ), &sp, 8 );
-      assert( *sp == ' ' );
+      ensure( *sp == ' ' );
 
       auto   fn = sp - sv.data( ) + 1;
 
       auto   nul = sv.find( '\0', fn );
-      assert( nul != sv.npos );
+      ensure( nul != sv.npos );
       ++nul;
 
-      assert( sv.size( ) >= ( nul + GIT_OID_RAWSZ ) );
+      ensure( sv.size( ) >= ( nul + GIT_OID_RAWSZ ) );
 
       if ( mode != GIT_FILEMODE_COMMIT )
       {
@@ -381,7 +381,7 @@ static void encrypt_tree( encrypt_element &top )
          out.append( sv.data( ), fn );
 
          auto  n = sprintf( out, "%0*zu", width, i );
-         assert( n == width );
+         ensure( n == width );
          out += n + 1;
 
          auto  &oid = top.refs[i];
@@ -393,7 +393,7 @@ static void encrypt_tree( encrypt_element &top )
       sv.remove_prefix( nul + GIT_OID_RAWSZ );
    }
 
-   assert( i == top.refs.size( ) );
+   ensure( i == top.refs.size( ) );
 
    if ( out.available( ) < ( 7 + width + 1 + GIT_OID_RAWSZ ) )
    {
@@ -404,7 +404,7 @@ static void encrypt_tree( encrypt_element &top )
    out << "100664 ";
 
    auto  n = sprintf( out, "%0*zu", width, top.refs.size( ) );
-   assert( n == width );
+   ensure( n == width );
    out += n + 1;
 
    out.append( top.oid.id, GIT_OID_RAWSZ );
@@ -445,7 +445,7 @@ void encrypt_object( encrypt_element &top )
    case GIT_OBJ_COMMIT:   encrypt_commit( top );   break;
    case GIT_OBJ_TREE:     encrypt_tree  ( top );   break;
    case GIT_OBJ_BLOB:     encrypt_blob  ( top );   break;
-   default:               assert( false );         break;
+   default:               ensure( false );         break;
    }
 
    trace( "encrypt ", git_odb_object_type( top.obj ), ' ', old_oid, "\n             . ", top.oid );
@@ -462,7 +462,7 @@ static bool encrypt_push( git_oid &oid, git_otype otype )
    if ( crypto_set.contains( oid ) )
    {
       auto  pair = omp_find( oid );
-      assert( pair != nullptr );
+      ensure( pair != nullptr );
 
       oid = pair->second;
 
@@ -482,7 +482,7 @@ static bool encrypt_push_ref( encrypt_element &top )
    switch ( git_odb_object_type( top.obj ) )
    {
    case GIT_OBJ_COMMIT:
-      assert( top.refs.size( ) > 0 );
+      ensure( top.refs.size( ) > 0 );
 
       for ( auto &ref_oid : std::views::drop( top.refs, 1 ) )
       {
@@ -557,12 +557,12 @@ static void encrypt_loop( )
 
       if ( encrypt_element( top ) )
       {
-         assert( &top == &encrypt_stack.back( ) );
+         ensure( &top == &encrypt_stack.back( ) );
          encrypt_stack.pop_back( );
       }
       else
       {
-         assert( &top != &encrypt_stack.back( ) );
+         ensure( &top != &encrypt_stack.back( ) );
       }
    }
 }
@@ -571,7 +571,7 @@ static void encrypt_loop( )
 
 void encrypt( git_revwalk *walk )
 {
-   assert( encrypt_stack.empty( ) );
+   ensure( encrypt_stack.empty( ) );
    encrypt_stack.clear( );
 
    // 由于 encrypt_stack 里保存的都是 oid 引用, 需要 vec 保存所有原始 oid
@@ -609,13 +609,13 @@ static void decrypt( git_oid &oid, const uint8_t *data, size_t size, git_otype o
    // 解密得到压缩层数据
    auto  bzip_size = aes_decrypt( bzip_buff, data, size );
 
-   assert( bzip_size >= ( 16 + 2 + 8 + 16 ) );
+   ensure( bzip_size >= ( 16 + 2 + 8 + 16 ) );
 
    uint8_t  *ptr = bzip_buff;
 
    // file size
    ptr += 16;
-   assert( ptr[0] <= 7 );
+   ensure( ptr[0] <= 7 );
 
    size_t    file_size = 0;
 
@@ -624,14 +624,14 @@ static void decrypt( git_oid &oid, const uint8_t *data, size_t size, git_otype o
 
    ptr += 2 + ptr[0];
 
-   assert( file_size <= MAX_FILE );
+   ensure( file_size <= MAX_FILE );
 
    // bzip3
    auto  bz3 = ::bz3;
    if ( file_size > MIN_BZIP3 )
    {
       bz3 = bz3_new( file_size );
-      assert( bz3 != nullptr );
+      ensure( bz3 != nullptr );
    }
 
    auto  sz = bzip_size - ( ptr - bzip_buff ) - 16;
@@ -643,8 +643,8 @@ static void decrypt( git_oid &oid, const uint8_t *data, size_t size, git_otype o
    auto  ret = bz3_decode_block( bz3, text_buff, sizeof( text_buff ), sz, file_size );
 #endif
 
-   assert( ret >= 0 );
-   assert( static_cast< unsigned >( ret ) == file_size );
+   ensure( ret >= 0 );
+   ensure( static_cast< unsigned >( ret ) == file_size );
 
    if ( bz3 != ::bz3 )
       bz3_free( bz3 );
@@ -653,13 +653,13 @@ static void decrypt( git_oid &oid, const uint8_t *data, size_t size, git_otype o
    git_ensure( ret );
 
    // 比较 hash
-   assert( memcmp( bzip_buff, oid.id, 16 ) == 0 );
+   ensure( memcmp( bzip_buff, oid.id, 16 ) == 0 );
 
    ptr = bzip_buff + bzip_size - 16;
-   assert( memcmp( ptr, oid.id + 16, 4 ) == 0 );
+   ensure( memcmp( ptr, oid.id + 16, 4 ) == 0 );
 
    for ( size_t i = 4; i < 16; ++i )
-      assert( ptr[i] == 0 );
+      ensure( ptr[i] == 0 );
 }
 
 
@@ -676,9 +676,9 @@ static void decrypt_commit( git_oid &oid, git_odb_object *obj )
    auto  sv = to_sv( obj );
 
    auto  lf = sv.find( "\n\n" );
-   assert( lf != sv.npos );
+   ensure( lf != sv.npos );
    sv.remove_prefix( lf + 2 );
-   assert( sv.size( ) >= 64 );
+   ensure( sv.size( ) >= 64 );
 
    Output< text_buff, sizeof( text_buff ) >  out;
 
@@ -687,16 +687,16 @@ static void decrypt_commit( git_oid &oid, git_odb_object *obj )
 
    while ( sv.size( ) > 64 )
    {
-      assert( sv[64] == '\n' );
+      ensure( sv[64] == '\n' );
 
       auto  ret = boost::beast::detail::base64::decode( ptr, sv.data( ), 64 );
-      assert( ret.first == 48 );
+      ensure( ret.first == 48 );
       ptr += 48;
 
       sv.remove_prefix( 65 );
    }
 
-   assert( ( sv.size( ) % 4 ) == 0 );
+   ensure( ( sv.size( ) % 4 ) == 0 );
    auto  ret = boost::beast::detail::base64::decode( ptr, sv.data( ), sv.size( ) );
    ptr += ret.first;
 
@@ -709,7 +709,7 @@ static void decrypt_tree( git_oid &oid, git_odb_object *obj )
 {
    auto  sv = to_sv( obj );
 
-   assert( sv.size( ) > GIT_OID_RAWSZ );
+   ensure( sv.size( ) > GIT_OID_RAWSZ );
 
    git_oid_fromraw( &oid, reinterpret_cast< const uint8_t * >( sv.data( ) ) + sv.size( ) - GIT_OID_RAWSZ );
 
@@ -749,7 +749,7 @@ void decrypt( git_oid &oid, git_odb_object *obj )
    case GIT_OBJ_COMMIT:   decrypt_commit( oid, obj );   break;
    case GIT_OBJ_TREE:     decrypt_tree  ( oid, obj );   break;
    case GIT_OBJ_BLOB:     decrypt_blob  ( oid, obj );   break;
-   default:               assert( false );         break;
+   default:               ensure( false );         break;
    }
 
    trace( "decrypt ", git_odb_object_type( obj ), ' ', old_oid, "\n             . ", oid );
@@ -807,7 +807,7 @@ void decrypt( git_revwalk *walk )
             break;
 
          default:
-            assert( false );
+            ensure( false );
          }
 
          for ( auto &ref_oid : refs )

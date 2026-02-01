@@ -1,6 +1,8 @@
-# git-remote-xcrypt
+﻿# git-remote-xcrypt
 
-一个 git-remote-helper 外部插件，用于加密远程 git 仓库
+[English](README.md)
+
+一个提供远程 Git 仓库透明加密功能的 `git-remote-helper` 插件。
 
 ## 特性
 - **全链路本地加密/解密**：密钥仅保存在本地仓库的 `.git/config`，远程仓库不含任何明文或密钥信息
@@ -80,43 +82,55 @@ $
 ## 编译
 
 ### 依赖
-- 构建工具：`cmake`、`g++`、`pkg-config`
+- 构建工具：`cmake`、`make`、`g++`、`pkg-config`
 - 第三方库：`bzip3`、`libgit2`、`openssl`、`boost`
 
 注意事项：
 - `bzip3` 需 **>= 1.4.1**（`1.4.0` 在部分 64 字节小文件场景可能解压失败）
 - 建议使用**较新版本** `libgit2`（Git 正在从 SHA-1 迁移到 SHA-256，旧版 `libgit2` 可能无法识别新格式仓库）
 
-### 构建
-在项目根目录 `git-remote-xcrypt` 下运行：
+### 构建步骤
+
+在项目根目录下运行：
+
+**Release 构建（推荐）：**
 ``` console
-$ mkdir build
-$ cd build
-$ cmake ..
-$ make
+$ cmake -B build -DCMAKE_BUILD_TYPE=Release
+$ cmake --build build -j
   ......
 ```
 
-安装：
+**Debug 构建：**
 ``` console
-$ make install
+$ cmake -B build -DCMAKE_BUILD_TYPE=Debug
+$ cmake --build build -j
+  ......
 ```
 
-清理：
+**安装：**
 ``` console
-$ make clean
+$ cmake --install build
 ```
 
-生成的可执行文件：
+**卸载：**
+``` console
+$ cmake --build build --target uninstall
+```
+注意：先要运行 `cmake --install build`
+
+**生成的可执行文件：**
 - `build/git-remote-xcrypt`
 
-## 密钥
-- 目前仅支持**明文口令**形式的密钥；密钥仅存储在**本地仓库**的 `.git/config` 中，远程仓库不保存任何密钥信息。
-- 需要在命令行传入口令参数时，必须添加 `psw:` 前缀。例如口令为 `abcde`，则应在命令行输入：
-  `psw:abcde`
+## 使用方法
 
-## 用户命令
-在本地仓库目录中直接运行 `git-remote-xcrypt`，用于创建/管理加密远程（配置写入 `.git/config`，不会修改远端仓库类型）：
+### 密钥格式
+- 目前仅支持**明文口令**形式的密钥。
+- 密钥仅存储在**本地仓库**的 `.git/config` 中，远程仓库不保存任何密钥信息。
+- 在终端传入口令参数时，必须添加 `psw:` 前缀。例如口令为 `abcde`，则应输入：`psw:abcde`
+
+### 命令列表
+在本地仓库目录中运行 `git-remote-xcrypt` 来创建和管理加密远程。配置写入 `.git/config`，不会修改远端仓库类型。
+
 ``` console
 $ git-remote-xcrypt
 usage: git-remote-xcrypt <command> [<args>...]
@@ -129,17 +143,18 @@ command:
 $
 ```
 
-### 克隆已经存在的加密仓库
-用于将**已加密的远程仓库**克隆为本地明文仓库，并在克隆过程中把密钥写入新仓库的 `.git/config`。
+### 克隆已加密的仓库
 
-用法：
+将**已加密的远程仓库**克隆为本地明文仓库。密钥在克隆过程中写入新**本地仓库**的 `.git/config`。
+
+**用法：**
 ``` console
 $ git-remote-xcrypt clone
 usage: git-remote-xcrypt clone <remote-name> <remote-url> <password> [<git clone options>] [-- <dir>]
 $
 ```
 
-示例，远程仓库 `https://www.abc.com/repo.git`，口令 `abcde`：
+**示例：**克隆远程仓库 `https://www.abc.com/repo.git`，口令为 `abcde`：
 ``` console
 $ git-remote-xcrypt clone origin https://www.abc.com/repo.git psw:abcde
 正克隆到 'abc'...
@@ -154,41 +169,50 @@ Decrypting objects: 340, 0
 $
 ```
 
-### 为已有的 Git 仓库添加加密远程
+### 为已有的本地仓库添加加密远程
+
+**用法：**
 ``` console
 $ git-remote-xcrypt add
 git-remote-xcrypt add <remote-name> <remote-url> <password> [<git remote add options>]
 $
 ```
 
-示例：添加加密远程
+**示例：**添加加密远程：
 ``` console
 $ git-remote-xcrypt add origin https://www.abc.com/repo.git psw:abcde
 $
 ```
 
 ### 清除加密远程的本地缓存
-当出现异常（如本地 refs/缓存与远端状态不一致导致的拉取/推送失败）时，可清理指定加密远程对应的本地缓存与引用，然后重新执行 `pull/push`。
+
+当出现异常（如本地 refs/缓存与远端状态不一致导致的拉取/推送失败）时，清理指定加密远程对应的本地缓存与引用，然后重新执行 `pull/push`。
+
+**用法：**
 ``` console
 $ git-remote-xcrypt clean
 usage: xcrypt clear <remote-name>
 $
 ```
 
-示例：清理 `origin` 的加密远程缓存
+**示例：**清理 `origin` 的加密远程缓存：
 ``` console
 $ git-remote-xcrypt clean origin
 $
 ```
 
-### 删除加密远程，并清理本地残留
+### 删除加密远程
+
+删除加密远程并清理本地残留，包括远程配置与密钥项。
+
+**用法：**
 ``` console
 $ git-remote-xcrypt remove
 usage: xcrypt remove <remote-name>
 $
 ```
 
-示例：删除加密远程 `origin`，会执行清理，并移除远程配置与密钥项
+**示例：**删除加密远程 `origin`：
 ``` console
 $ git-remote-xcrypt remove origin
 $

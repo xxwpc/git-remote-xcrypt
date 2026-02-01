@@ -1,4 +1,4 @@
-#include "common.h"
+﻿#include "common.h"
 
 #include <chrono>
 #include <condition_variable>
@@ -120,7 +120,7 @@ static void progress_thread( )
 
 void progress_init( )
 {
-   assert( !thread.joinable( ) );
+   ensure( !thread.joinable( ) );
 
    thread = std::thread( &progress_thread );
 }
@@ -166,7 +166,7 @@ void progress_end_line( )
       cv.wait( lock );
    }
 
-   assert( prog_end_line == 2 );
+   ensure( prog_end_line == 2 );
 }
 
 

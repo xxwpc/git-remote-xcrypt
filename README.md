@@ -1,9 +1,8 @@
-# README.md
-- zh_CN [简体中文](README.zh_CN.md)
+﻿# git-remote-xcrypt
 
-# git-remote-xcrypt
+[简体中文](README.zh_CN.md)
 
-An external `git-remote-helper` plugin for encrypting remote Git repositories.
+A `git-remote-helper` plugin that provides transparent encryption for remote Git repositories.
 
 ## Features
 - **End-to-end local encryption/decryption**: The key is stored only in the local repository’s `.git/config`. The remote repository contains no plaintext and no key material.
@@ -83,7 +82,7 @@ $
 ## Build
 
 ### Dependencies
-- Build tools: `cmake`, `g++`, `pkg-config`
+- Build tools: `cmake`, `make`, `g++`, `pkg-config`
 - Third-party libraries: `bzip3`, `libgit2`, `openssl`, `boost`
 
 Notes:
@@ -91,35 +90,47 @@ Notes:
 - A **newer** `libgit2` is recommended (Git is migrating from SHA-1 to SHA-256; older `libgit2` may not recognize repositories in the new format).
 
 ### Build Steps
-Run in the project root `git-remote-xcrypt`:
+
+In the project root directory:
+
+**Release build (recommended):**
 ``` console
-$ mkdir build
-$ cd build
-$ cmake ..
-$ make
+$ cmake -B build -DCMAKE_BUILD_TYPE=Release
+$ cmake --build build -j
   ......
 ```
 
-Install:
+**Debug build:**
 ``` console
-$ make install
+$ cmake -B build -DCMAKE_BUILD_TYPE=Debug
+$ cmake --build build -j
+  ......
 ```
 
-Uninstall:
+**Install:**
 ``` console
-$ make clean
+$ cmake --install build
 ```
 
-Generated executable:
+**Uninstall:**
+``` console
+$ cmake --build build --target uninstall
+```
+Note: Run `cmake --install build` before uninstall.
+
+**Generated executable:**
 - `build/git-remote-xcrypt`
 
-## Key
-- Currently only **plaintext passphrases** are supported as keys; the key is stored only in the **local repository**’s `.git/config`, and the remote repository stores no key information.
-- When passing the passphrase via command line, you must prefix it with `psw:`. For example, if the passphrase is `abcde`, you should enter:  
-  `psw:abcde`
+## Usage
 
-## User Commands
-Run `git-remote-xcrypt` directly in a local repository directory to create/manage encrypted remotes (configuration is written to `.git/config` and the remote repository type is not modified):
+### Key Format
+- Currently only **plaintext passphrases** are supported as keys.
+- The key is stored only in the **local repository**'s `.git/config`; the remote repository stores no key information.
+- When passing the passphrase via terminal, prefix it with `psw:`. For example, if the passphrase is `abcde`, enter: `psw:abcde`
+
+### Commands
+Run `git-remote-xcrypt` in a local repository directory to create and manage encrypted remotes. Configuration is written to `.git/config` without modifying the remote repository type.
+
 ``` console
 $ git-remote-xcrypt
 usage: git-remote-xcrypt <command> [<args>...]
@@ -133,16 +144,17 @@ $
 ```
 
 ### Clone an Existing Encrypted Repository
-Used to clone an **already-encrypted remote repository** into a local plaintext repository, and to write the key into the new repository’s `.git/config` during cloning.
 
-Usage:
+Clone an **already-encrypted remote repository** into a local plaintext repository. The key is written to the new **local repository**'s `.git/config` during cloning.
+
+**Usage:**
 ``` console
 $ git-remote-xcrypt clone
 usage: git-remote-xcrypt clone <remote-name> <remote-url> <password> [<git clone options>] [-- <dir>]
 $
 ```
 
-Example, remote repository `https://www.abc.com/repo.git`, passphrase `abcde`:
+**Example:** Clone remote repository `https://www.abc.com/repo.git` with passphrase `abcde`:
 ``` console
 $ git-remote-xcrypt clone origin https://www.abc.com/repo.git psw:abcde
 正克隆到 'abc'...
@@ -157,41 +169,50 @@ Decrypting objects: 340, 0
 $
 ```
 
-### Add an Encrypted Remote to an Existing Git Repository
+### Add an Encrypted Remote to an Existing Local Repository
+
+**Usage:**
 ``` console
 $ git-remote-xcrypt add
 git-remote-xcrypt add <remote-name> <remote-url> <password> [<git remote add options>]
 $
 ```
 
-#xample: add an encrypted remote
+**Example:** Add an encrypted remote:
 ``` console
 $ git-remote-xcrypt add origin https://www.abc.com/repo.git psw:abcde
 $
 ```
 
 ### Clear Local Cache for an Encrypted Remote
-When errors occur (e.g., fetch/push failures caused by local refs/cache being out of sync with the remote state), you can clear the local cache and refs for the specified encrypted remote and then re-run `pull/push`.
+
+When errors occur (e.g., fetch/push failures caused by local refs/cache being out of sync with the remote state), clear the local cache and refs for the specified encrypted remote, then re-run `pull/push`.
+
+**Usage:**
 ``` console
 $ git-remote-xcrypt clean
 usage: xcrypt clear <remote-name>
 $
 ```
 
-Example: clear the encrypted remote cache for `origin`
+**Example:** Clear the encrypted remote cache for `origin`:
 ``` console
 $ git-remote-xcrypt clean origin
 $
 ```
 
-### Remove an Encrypted Remote and Clean Up Local Remnants
+### Remove an Encrypted Remote
+
+Remove an encrypted remote and clean up local remnants, including remote configuration and key entries.
+
+**Usage:**
 ``` console
 $ git-remote-xcrypt remove
 usage: xcrypt remove <remote-name>
 $
 ```
 
-Example: remove the encrypted remote `origin`; this will perform cleanup and remove the remote configuration and key entries.
+**Example:** Remove the encrypted remote `origin`:
 ``` console
 $ git-remote-xcrypt remove origin
 $

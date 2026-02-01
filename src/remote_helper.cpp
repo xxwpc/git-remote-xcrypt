@@ -5,10 +5,8 @@
 #include <typeinfo>
 #include <vector>
 
-//#include <errno.h>
 #include <fcntl.h>
 #include <termios.h>
-//#include <unistd.h>
 
 #include <boost/preprocessor/arithmetic/sub.hpp>
 #include <boost/preprocessor/control/if.hpp>
@@ -184,7 +182,7 @@ static int ssh_cred_acquire( git_cred **cred, const char *url, const char *usern
 {
    (void)url;
 
-   assert( payload != nullptr );
+   ensure( payload != nullptr );
    auto  &idx = *static_cast< unsigned * >( payload );
 
    // 依次尝试的证书列表
@@ -290,7 +288,7 @@ static int push_transfer_progress( unsigned int current, unsigned int total, siz
 
 static int push_update_ref( const char *refname, const char *status, void *data )
 {
-   assert( status == nullptr );
+   ensure( status == nullptr );
 
    output( "ok %s", refname );
 
@@ -396,7 +394,7 @@ auto & read_input( )
    std::string_view  sv( stdin_line );
    boost::split( argv, sv, isspace, boost::token_compress_on );
 
-   assert( !argv.empty( ) );
+   ensure( !argv.empty( ) );
    if ( argv.back( ).empty( ) )
       argv.pop_back( );
 
@@ -584,7 +582,7 @@ static void do_list_result( )
             git_oid  oid = h->oid;
             decrypt( oid );
             map = omp_find( h->oid );
-            assert( map != nullptr );
+            ensure( map != nullptr );
          }
 
          char  str[GIT_OID_HEXSZ+1];
@@ -632,7 +630,7 @@ static void do_fetch( )
       auto  ret = git_oid_fromstr( &oid, argv[1].data( ) );
       git_ensure( ret );
 
-      assert( git_odb_exists( odb, &oid ) != 0 );
+      ensure( git_odb_exists( odb, &oid ) != 0 );
 
    } while ( !read_input( ).empty( ) );
 
@@ -660,13 +658,13 @@ static void do_push( )
 
    std::list< std::tuple< bool, git_oid *, std::string > >    refspec_list;
 
-   std::regex     rgx( "\\+?([^:]+)?:(.*)" );
+   std::regex     rgx( "\\+?([^:]*):(.+)" );
    std::cmatch    m;
 
    do
    {
       auto  &orig_refspec = argv[1];
-      assert( std::regex_match( argv[1].data( ), m, rgx ) );
+      ensure( std::regex_match( orig_refspec.begin( ), orig_refspec.end( ), m, rgx ) );
 
       auto  &m1 = m[1];
       auto  &m2 = m[2];
@@ -675,7 +673,7 @@ static void do_push( )
 
       auto  oid = static_cast< git_oid * >( nullptr );
 
-      if ( m1.matched )
+      if ( m1.length( ) > 0 )
       {
          git_object  *obj;
          auto  ret = git_revparse_single( &obj, repo, m1.str( ).c_str( ) );
@@ -722,7 +720,7 @@ static void do_push( )
       else
       {
          auto  omp = omp_find( *oid );
-         assert( omp != nullptr );
+         ensure( omp != nullptr );
 
          trace( "push encrypt   ", ( std::get<0>( rs ) ? "+" : "" ), omp->second, ":", std::get<2>( rs ) );
 

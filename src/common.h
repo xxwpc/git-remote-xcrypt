@@ -1,5 +1,4 @@
-#include <assert.h>
-#include <stdio.h>
+﻿#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -88,6 +87,13 @@ inline void trace_format( const std::string &str )
 }
 
 
+inline void trace_format( const std::string_view &str )
+{
+   for ( auto c : str )
+      fprintf( stderr, "%c", c );
+}
+
+
 inline void trace_format( const int &val )
 {
    fprintf( stderr, "%d", val );
@@ -97,6 +103,12 @@ inline void trace_format( const int &val )
 inline void trace_format( const unsigned int &val )
 {
    fprintf( stderr, "%u", val );
+}
+
+
+inline void trace_format( const unsigned long &val )
+{
+   fprintf( stderr, "%lu", val );
 }
 
 
@@ -163,6 +175,15 @@ inline void trace( const auto &...args )
    })
 
 
+
+#define ensure( cond ) \
+   ({ \
+      if ( !( cond ) ) \
+         xcrypt_abort( "ensure failed: %s", #cond ); \
+   })
+
+
+
 #define  git_ensure( ret ) \
    if ( ret < 0 ) { \
       auto  e = giterr_last( ); \
@@ -192,7 +213,7 @@ public:
    Pipe( const std::string &cmd )
    {
       _fp = popen( cmd.c_str( ), "r" );
-      assert( _fp != nullptr );
+      ensure( _fp != nullptr );
    }
 
    ~Pipe( )
@@ -372,7 +393,7 @@ public:
    Sha3Ctx( )
    {
       _ctx = EVP_MD_CTX_new( );
-      assert( _ctx != nullptr );
+      ensure( _ctx != nullptr );
 
       auto ret = EVP_DigestInit_ex( _ctx, EVP_sha3_256( ), nullptr );
       ssl_ensure( ret );
@@ -433,7 +454,7 @@ class Memory
 public:
    Memory( size_t size )
    {
-      assert( size > 0 );
+      ensure( size > 0 );
 
       if ( size <= SIZE )
          _memory = ARRAY;
@@ -441,7 +462,7 @@ public:
       else
       {
          _memory = static_cast< uint8_t * >( ::malloc( size ) );
-         assert( _memory != nullptr );
+         ensure( _memory != nullptr );
       }
    }
 

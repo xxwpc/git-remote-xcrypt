@@ -154,7 +154,7 @@ static void remote_refs( const char *prefix )
  */
 static void check_remote_xcrypt( const char *name )
 {
-   assert( remote == nullptr );
+   ensure( remote == nullptr );
 
    repo_open_cur_dir( );
 
@@ -228,7 +228,7 @@ static int do_clear( unsigned argc, char **argv )
       auto  path = omp_path( );
       trace( "delete omp : ", path );
       std::filesystem::remove( omp_path( ), ec );
-      assert( ec == std::error_code( ) );
+      ensure( ec == std::error_code( ) );
    }
 
    remote_refs( "refs/remotes/" );
@@ -354,7 +354,7 @@ usage:
 
 static int do_crypt( unsigned argc, char **argv, void (*crypt)( git_oid & ) )
 {
-   assert( argc >= 3 );
+   ensure( argc >= 3 );
 
    repo_open_cur_dir( );
    load_remote( argv[1] );
