@@ -4,8 +4,8 @@ project(git-remote-xcrypt LANGUAGES CXX)
 
 # 要求 GCC >= 14 (g++) 以支持本项目使用的 C++23 特性
 if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
-  if (CMAKE_CXX_COMPILER_VERSION VERSION_LESS "14")
-    message(FATAL_ERROR "GCC (g++) >= 14 is required. Detected: ${CMAKE_CXX_COMPILER_VERSION}")
+  if (CMAKE_CXX_COMPILER_VERSION VERSION_LESS "11")
+    message(FATAL_ERROR "GCC (g++) >= 11 is required. Detected: ${CMAKE_CXX_COMPILER_VERSION}")
   endif()
 endif()
 
@@ -23,8 +23,22 @@ target_include_directories(git-remote-xcrypt PRIVATE "${CMAKE_CURRENT_SOURCE_DIR
 # --- 依赖项 (等价于: -lgit2 -lbzip3 -lcrypto -lboost_system -lboost_filesystem) ---
 find_package(PkgConfig REQUIRED)
 
-pkg_check_modules(LIBGIT2 REQUIRED IMPORTED_TARGET libgit2)
-pkg_check_modules(BZIP3 REQUIRED IMPORTED_TARGET bzip3>=1.4.1)
+# Check for libgit2
+pkg_check_modules(LIBGIT2 IMPORTED_TARGET libgit2)
+if (NOT LIBGIT2_FOUND)
+  message(FATAL_ERROR "===========================================================================\n"
+    "libgit2 not found. Please install:\n"
+    "  Ubuntu/Debian: sudo apt install libgit2-dev")
+endif()
+
+# Check for bzip3 (>= 1.4.1)
+pkg_check_modules(BZIP3 IMPORTED_TARGET bzip3>=1.4.1)
+if (NOT BZIP3_FOUND)
+  message(FATAL_ERROR "===========================================================================\n"
+    "bzip3 (>= 1.4.1) not found. Please install:\n"
+    "  Ubuntu 23.04+: sudo apt install libbzip3-dev\n"
+    "  Ubuntu 22.04:  build from source (https://github.com/kspalaiologos/bzip3)")
+endif()
 
 # 从 pkg-config 版本字符串派生 LIBBZ3_VERSION，例如 2.5.3 -> 20503
 execute_process(
@@ -43,38 +57,100 @@ endif()
 
 math(EXPR LIBBZ3_VERSION "${CMAKE_MATCH_1} * 10000 + ${CMAKE_MATCH_2} * 100 + ${CMAKE_MATCH_3}")
 
-find_package(OpenSSL REQUIRED)          # 提供 OpenSSL::Crypto
-
-# 使用 CMP0167 策略查找 Boost
-cmake_policy(SET CMP0167 NEW)
-find_package(Boost QUIET)
-if (NOT Boost_FOUND)
-   cmake_policy(SET CMP0167 OLD)
-   find_package( Boost QUIET )
-   if (NOT Boost_FOUND)
-      message(FATAL_ERROR "Boost not found via CMP0167=NEW nor CMP0167=OLD. Please install Boost (dev) and ensure CMake can find it.")
-   endif()
+# Check for OpenSSL
+find_package(OpenSSL)
+if (NOT OpenSSL_FOUND)
+  message(FATAL_ERROR "===========================================================================\n"
+    "OpenSSL not found. Please install:\n"
+    "  Ubuntu/Debian: sudo apt install libssl-dev")
 endif()
 
-find_package(Boost REQUIRED COMPONENTS context system filesystem)
+# Check for libtss2 (optional)
+pkg_check_modules(TSS2 IMPORTED_TARGET tss2-esys)
+if (TSS2_FOUND)
+  message(STATUS "Found libtss2: ${TSS2_VERSION}")
+else()
+  message(STATUS "libtss2 not found, HAVE_TSS2 will not be defined")
+endif()
 
-# boost 1.70.0 之后, 才有 process 独立库
-if (Boost_VERSION VERSION_GREATER_EQUAL "1.70.0")
-  find_package(Boost REQUIRED COMPONENTS process)
-  target_link_libraries(git-remote-xcrypt PRIVATE Boost::process)
+# Check for Boost
+# Try with CMP0167 policy if available (CMake 3.30+)
+if (POLICY CMP0167)
+  cmake_policy(SET CMP0167 NEW)
+endif()
+
+find_package(Boost QUIET)
+if (NOT Boost_FOUND)
+  if (POLICY CMP0167)
+    cmake_policy(SET CMP0167 OLD)
+    find_package(Boost QUIET)
+  endif()
+  if (NOT Boost_FOUND)
+    message(FATAL_ERROR "===========================================================================\n"
+      "Boost not found. Please install:\n"
+      "  Ubuntu/Debian: sudo apt install libboost-dev")
+  endif()
+endif()
+
+# Check for required Boost components
+find_package(Boost QUIET COMPONENTS context system filesystem)
+# Check for required Boost components individually
+set(MISSING_BOOST_COMPONENTS "")
+
+if (NOT Boost_context_FOUND)
+  list(APPEND MISSING_BOOST_COMPONENTS "libboost-context-dev")
+endif()
+
+if (NOT Boost_system_FOUND)
+  list(APPEND MISSING_BOOST_COMPONENTS "libboost-system-dev")
+endif()
+
+if (NOT Boost_filesystem_FOUND)
+  list(APPEND MISSING_BOOST_COMPONENTS "libboost-filesystem-dev")
+endif()
+
+if (MISSING_BOOST_COMPONENTS)
+  string(REPLACE ";" " " MISSING_COMPONENTS_STR "${MISSING_BOOST_COMPONENTS}")
+  message(FATAL_ERROR "===========================================================================\n"
+    "Missing Boost components. Please install:\n"
+    "  Ubuntu/Debian: sudo apt install ${MISSING_COMPONENTS_STR}")
+endif()
+
+# Boost 1.86.0 之后, 才有 process 独立库
+if (Boost_VERSION VERSION_GREATER_EQUAL "1.86.0")
+  find_package(Boost QUIET COMPONENTS process)
+  if (Boost_process_FOUND)
+    target_link_libraries(git-remote-xcrypt PRIVATE Boost::process)
+  else()
+    message(FATAL_ERROR "===========================================================================\n"
+      "Boost process component not found (Boost >= 1.86.0 detected).\n"
+      "Please install:\n"
+      "  Ubuntu/Debian: sudo apt install libboost-process-dev")
+  endif()
 endif()
 
 target_compile_definitions(git-remote-xcrypt PRIVATE
   LIBBZ3_VERSION=${LIBBZ3_VERSION}
 )
 
+# Add HAVE_TSS2 definition if libtss2 is found
+if (TSS2_FOUND)
+  target_compile_definitions(git-remote-xcrypt PRIVATE HAVE_TSS2)
+endif()
+
 target_link_libraries(git-remote-xcrypt PRIVATE
   PkgConfig::LIBGIT2
   PkgConfig::BZIP3
   OpenSSL::Crypto
+  Boost::context
   Boost::system
   Boost::filesystem
 )
+
+# Link libtss2 if found
+if (TSS2_FOUND)
+  target_link_libraries(git-remote-xcrypt PRIVATE PkgConfig::TSS2)
+endif()
 
 # --- 安装 (等价于: install -C git-remote-xcrypt /usr/bin/) ---
 install(TARGETS git-remote-xcrypt RUNTIME DESTINATION bin)
