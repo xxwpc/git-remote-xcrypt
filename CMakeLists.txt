@@ -24,21 +24,10 @@ target_include_directories(git-remote-xcrypt PRIVATE "${CMAKE_CURRENT_SOURCE_DIR
 find_package(PkgConfig REQUIRED)
 
 # Check for libgit2
-pkg_check_modules(LIBGIT2 IMPORTED_TARGET libgit2)
-if (NOT LIBGIT2_FOUND)
-  message(FATAL_ERROR "===========================================================================\n"
-    "libgit2 not found. Please install:\n"
-    "  Ubuntu/Debian: sudo apt install libgit2-dev")
-endif()
+pkg_check_modules(LIBGIT2 REQUIRED IMPORTED_TARGET libgit2)
 
 # Check for bzip3 (>= 1.4.1)
-pkg_check_modules(BZIP3 IMPORTED_TARGET bzip3>=1.4.1)
-if (NOT BZIP3_FOUND)
-  message(FATAL_ERROR "===========================================================================\n"
-    "bzip3 (>= 1.4.1) not found. Please install:\n"
-    "  Ubuntu 23.04+: sudo apt install libbzip3-dev\n"
-    "  Ubuntu 22.04:  build from source (https://github.com/kspalaiologos/bzip3)")
-endif()
+pkg_check_modules(BZIP3 REQUIRED IMPORTED_TARGET bzip3>=1.4.1)
 
 # 从 pkg-config 版本字符串派生 LIBBZ3_VERSION，例如 2.5.3 -> 20503
 execute_process(
@@ -58,12 +47,7 @@ endif()
 math(EXPR LIBBZ3_VERSION "${CMAKE_MATCH_1} * 10000 + ${CMAKE_MATCH_2} * 100 + ${CMAKE_MATCH_3}")
 
 # Check for OpenSSL
-find_package(OpenSSL)
-if (NOT OpenSSL_FOUND)
-  message(FATAL_ERROR "===========================================================================\n"
-    "OpenSSL not found. Please install:\n"
-    "  Ubuntu/Debian: sudo apt install libssl-dev")
-endif()
+find_package(OpenSSL REQUIRED)
 
 # Check for libtss2 (optional)
 pkg_check_modules(TSS2 IMPORTED_TARGET tss2-esys)
@@ -74,59 +58,23 @@ else()
 endif()
 
 # Check for Boost
-# Try with CMP0167 policy if available (CMake 3.30+)
+# CMP0167 (CMake 3.30+): Boost 用 package-config 模式查找 (BoostConfig.cmake, 需 boost>=1.70)。
+# 先探测系统是否提供 BoostConfig.cmake：有则用 NEW (config 模式, 如 Ubuntu)；
+# 没有则回落到 OLD (FindBoost 模式, 如 Cygwin 的 Boost 1.66)。
 if (POLICY CMP0167)
-  cmake_policy(SET CMP0167 NEW)
-endif()
-
-find_package(Boost QUIET)
-if (NOT Boost_FOUND)
-  if (POLICY CMP0167)
+  find_package(Boost CONFIG QUIET)
+  if (Boost_FOUND)
+    cmake_policy(SET CMP0167 NEW)
+  else()
     cmake_policy(SET CMP0167 OLD)
-    find_package(Boost QUIET)
-  endif()
-  if (NOT Boost_FOUND)
-    message(FATAL_ERROR "===========================================================================\n"
-      "Boost not found. Please install:\n"
-      "  Ubuntu/Debian: sudo apt install libboost-dev")
   endif()
 endif()
-
-# Check for required Boost components
-find_package(Boost QUIET COMPONENTS context system filesystem)
-# Check for required Boost components individually
-set(MISSING_BOOST_COMPONENTS "")
-
-if (NOT Boost_context_FOUND)
-  list(APPEND MISSING_BOOST_COMPONENTS "libboost-context-dev")
-endif()
-
-if (NOT Boost_system_FOUND)
-  list(APPEND MISSING_BOOST_COMPONENTS "libboost-system-dev")
-endif()
-
-if (NOT Boost_filesystem_FOUND)
-  list(APPEND MISSING_BOOST_COMPONENTS "libboost-filesystem-dev")
-endif()
-
-if (MISSING_BOOST_COMPONENTS)
-  string(REPLACE ";" " " MISSING_COMPONENTS_STR "${MISSING_BOOST_COMPONENTS}")
-  message(FATAL_ERROR "===========================================================================\n"
-    "Missing Boost components. Please install:\n"
-    "  Ubuntu/Debian: sudo apt install ${MISSING_COMPONENTS_STR}")
-endif()
+find_package(Boost REQUIRED COMPONENTS context filesystem)
 
 # Boost 1.86.0 之后, 才有 process 独立库
 if (Boost_VERSION VERSION_GREATER_EQUAL "1.86.0")
-  find_package(Boost QUIET COMPONENTS process)
-  if (Boost_process_FOUND)
-    target_link_libraries(git-remote-xcrypt PRIVATE Boost::process)
-  else()
-    message(FATAL_ERROR "===========================================================================\n"
-      "Boost process component not found (Boost >= 1.86.0 detected).\n"
-      "Please install:\n"
-      "  Ubuntu/Debian: sudo apt install libboost-process-dev")
-  endif()
+  find_package(Boost REQUIRED COMPONENTS process)
+  target_link_libraries(git-remote-xcrypt PRIVATE Boost::process)
 endif()
 
 target_compile_definitions(git-remote-xcrypt PRIVATE
@@ -143,7 +91,6 @@ target_link_libraries(git-remote-xcrypt PRIVATE
   PkgConfig::BZIP3
   OpenSSL::Crypto
   Boost::context
-  Boost::system
   Boost::filesystem
 )
 

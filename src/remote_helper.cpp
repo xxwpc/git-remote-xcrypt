@@ -446,7 +446,7 @@ static git_transport * connect_fetch( )
 #else
    t->set_callbacks( t, transport_message, nullptr, nullptr, nullptr );
 
-   ret = t->connect( t, remote_url, ssh_cred_acquire, nullptr, nullptr, GIT_DIRECTION_FETCH, 0 );
+   ret = t->connect( t, remote_url, ssh_cred_acquire, &cred_index, nullptr, GIT_DIRECTION_FETCH, 0 );
    git_ensure( ret );
 #endif
 
